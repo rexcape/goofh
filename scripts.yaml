@@ -1,0 +1,4 @@
+scripts:
+  start: deno run --allow-env --allow-net --allow-read server.ts
+  dev: deno run --allow-env --allow-net --allow-read --watch server.ts
+  build: deno compile --allow-env --allow-net --allow-read server.ts
