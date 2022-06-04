@@ -5,8 +5,14 @@ import matter from 'https://esm.sh/gray-matter@4.0.3'
 import { Application, Router } from 'https://deno.land/x/oak@v10.6.0/mod.ts'
 import { oakCors } from 'https://deno.land/x/cors@v1.2.2/mod.ts'
 import { walk } from 'https://deno.land/std@0.141.0/fs/mod.ts'
-import { globToRegExp, parse } from 'https://deno.land/std@0.141.0/path/mod.ts'
+import {
+  globToRegExp,
+  parse,
+  join,
+  resolve,
+} from 'https://deno.land/std@0.141.0/path/mod.ts'
 import * as log from 'https://deno.land/std@0.141.0/log/mod.ts'
+import { parse as parseFlag } from 'https://deno.land/std@0.142.0/flags/mod.ts'
 
 const port = 3456
 
@@ -27,45 +33,13 @@ interface Schema {
 
 const schemas: Schema[] = []
 
-log.info('Loading templates')
+const baseDir = resolve(parseFlag(Deno.args)['baseDir'])
 
-// try {
-//   await Deno.open('templates', { read: true })
-// } catch (_) {
-//   log.error('Can not find templates folder. Program exited with 1')
-//   Deno.exit(1)
-// }
+log.info('Basedir ' + baseDir)
 
-for await (const w of walk('templates', {
-  match: [globToRegExp('**/*.{handlebars,hbs}')],
-})) {
-  if (w.isFile) {
-    const content = await Deno.readFile(w.path)
-    const fileName = parse(w.name).name
+log.info('Loading schemas')
 
-    const contentText = new TextDecoder().decode(content)
-    const converted = matter(contentText)
-
-    const templateName = converted.data.name ?? fileName
-
-    if (converted.data.partial) {
-      Handlebars.registerPartial(converted.data.partial, converted.content)
-    }
-
-    if (!converted.data.schema) {
-      log.error(`File ${w.name} does not have a schema`)
-      Deno.exit(1)
-    }
-
-    templates.push({
-      name: templateName,
-      schema: converted.data.schema,
-      hbs: Handlebars.compile(converted.content),
-    })
-  }
-}
-
-for await (const w of walk('schemas', {
+for await (const w of walk(join(baseDir, 'schemas'), {
   match: [globToRegExp('**/*' + '.json')],
 })) {
   if (w.isFile) {
@@ -80,6 +54,41 @@ for await (const w of walk('schemas', {
       log.error(`Error parsing ${w.name}`)
       Deno.exit(1)
     }
+  }
+}
+
+log.info('Loading templates')
+
+for await (const w of walk(join(baseDir, 'templates'), {
+  match: [globToRegExp('**/*.{handlebars,hbs}')],
+})) {
+  if (w.isFile) {
+    const content = await Deno.readFile(w.path)
+    const fileName = parse(w.name).name
+
+    const contentText = new TextDecoder().decode(content)
+    const converted = matter(contentText)
+
+    const templateName = converted.data.name ?? fileName
+    const schemaName = converted.data.schema
+
+    if (converted.data.partial) {
+      Handlebars.registerPartial(converted.data.partial, converted.content)
+    }
+
+    if (!schemaName) {
+      log.error(`File ${w.name} does not have a schema`)
+      Deno.exit(1)
+    } else if (!schemas.map((s) => s.name).includes(schemaName)) {
+      log.error(`File ${w.name}'s schema ${schemaName} not found`)
+      Deno.exit(1)
+    }
+
+    templates.push({
+      name: templateName,
+      schema: schemaName,
+      hbs: Handlebars.compile(converted.content),
+    })
   }
 }
 
