@@ -33,7 +33,7 @@ interface Schema {
 
 const schemas: Schema[] = []
 
-const baseDir = resolve(parseFlag(Deno.args)['baseDir'])
+const baseDir = resolve(parseFlag(Deno.args)['baseDir'] || '.')
 
 log.info('Basedir ' + baseDir)
 
